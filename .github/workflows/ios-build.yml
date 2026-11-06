@@ -41,6 +41,15 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Prepare app icon
+        run: |
+          set -euo pipefail
+          SOURCE="AC3443E9-F948-430B-9A1A-68068D0CD528.png"
+          DEST="Resources/Assets.xcassets/AppIcon.appiconset/icon.png"
+          test -f "$SOURCE"
+          sips -s format png -z 1024 1024 "$SOURCE" --out "$DEST" >/dev/null
+          file "$DEST"
+
       - name: Resolve app name
         id: app
         run: |
