@@ -48,7 +48,7 @@ targets:
         GENERATE_INFOPLIST_FILE: "YES"
 
 schemes:
-  AppName:
+  快领:
     build:
       targets:
         AppName: all
