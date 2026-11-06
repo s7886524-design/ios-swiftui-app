@@ -8,23 +8,24 @@ import PhotosUI
 // MARK: - 样式
 
 private enum SteamStyle {
-    static let background = Color(red: 0.047, green: 0.055, blue: 0.071)
-    static let card = Color(red: 0.061, green: 0.071, blue: 0.090)
-    static let cardLight = Color(red: 0.074, green: 0.085, blue: 0.106)
-    static let blue = Color(red: 0.42, green: 0.62, blue: 0.78)
-    static let cyan = Color(red: 0.56, green: 0.73, blue: 0.78)
-    static let green = Color(red: 0.35, green: 0.83, blue: 0.55)
-    static let secondary = Color.white.opacity(0.58)
-    static let border = Color.white.opacity(0.035)
+    // GPT-inspired neutral palette: quiet surfaces, clear hierarchy, one restrained accent.
+    static let background = Color(red: 0.082, green: 0.082, blue: 0.082)
+    static let card = Color(red: 0.118, green: 0.118, blue: 0.118)
+    static let cardLight = Color(red: 0.165, green: 0.165, blue: 0.165)
+    static let blue = Color(red: 0.78, green: 0.78, blue: 0.78)
+    static let cyan = Color(red: 0.38, green: 0.72, blue: 0.62)
+    static let green = Color(red: 0.38, green: 0.72, blue: 0.62)
+    static let secondary = Color.white.opacity(0.62)
+    static let border = Color.white.opacity(0.075)
 }
 
 private enum EpicStyle {
-    static let background = Color(red: 0.047, green: 0.050, blue: 0.058)
-    static let panel = Color(red: 0.061, green: 0.065, blue: 0.075)
-    static let panelLight = Color(red: 0.074, green: 0.078, blue: 0.090)
+    static let background = SteamStyle.background
+    static let panel = SteamStyle.card
+    static let panelLight = SteamStyle.cardLight
     static let text = Color.white
-    static let secondary = Color.white.opacity(0.62)
-    static let border = Color.white.opacity(0.035)
+    static let secondary = SteamStyle.secondary
+    static let border = SteamStyle.border
 }
 
 // MARK: - Steam 模型
@@ -923,25 +924,14 @@ final class EpicStore: ObservableObject {
 
 // MARK: - 克制的微色阶表面
 private struct PremiumSurface: ViewModifier {
-    var radius: CGFloat = 16
+    var radius: CGFloat = 18
     func body(content: Content) -> some View {
         content
-            .background {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.018), Color.white.opacity(0.004)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .background(SteamStyle.card, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-            }
+            .background(SteamStyle.card, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.045), lineWidth: 0.7)
+                    .strokeBorder(Color.white.opacity(0.075), lineWidth: 0.8)
             }
-            .shadow(color: .black.opacity(0.16), radius: 18, x: 0, y: 9)
     }
 }
 
@@ -1002,7 +992,7 @@ struct ContentView: View {
                 .tag(2)
         }
         .environmentObject(accountStore)
-        .tint(selectedPlatform == 0 ? SteamStyle.cyan : .white)
+        .tint(SteamStyle.green)
         .animation(.spring(response: 0.34, dampingFraction: 0.78), value: selectedPlatform)
         .preferredColorScheme(appearance == "system" ? nil : (appearance == "light" ? .light : .dark))
         .onOpenURL { url in
@@ -1154,45 +1144,24 @@ private struct SteamHomeView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 13) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                SteamStyle.blue,
-                                Color(red: 0.16, green: 0.37, blue: 0.75)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 54, height: 54)
-
-                Image(systemName: "gift.fill")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Steam Games")
-                    .font(.system(size: 23, weight: .bold))
+                Text("Steam")
+                    .font(.system(size: 29, weight: .semibold))
+                    .tracking(-0.8)
                     .foregroundStyle(.white)
-
-                Text("发现 Steam 限时免费好游戏")
-                    .font(.system(size: 12))
+                Text("限时免费 · 值得收藏")
+                    .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(SteamStyle.secondary)
             }
-
-            Spacer(minLength: 0)
-
+            Spacer()
             Button {
                 Task { await store.loadGames() }
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(SteamStyle.cyan)
-                    .frame(width: 42, height: 42)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .frame(width: 40, height: 40)
                     .background(SteamStyle.cardLight, in: Circle())
             }
             .buttonStyle(.plain)
@@ -1916,37 +1885,23 @@ private struct EpicHomeView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.white)
-                    .frame(width: 44, height: 44)
-
-                Image(systemName: "e.square.fill")
-                    .font(.system(size: 28, weight: .black))
-                    .foregroundStyle(Color.black)
-            }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("EPIC GAMES")
-                    .font(.system(size: 20, weight: .black, design: .rounded))
-                    .tracking(1.1)
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Epic Games")
+                    .font(.system(size: 29, weight: .semibold))
+                    .tracking(-0.8)
                     .foregroundStyle(.white)
-
-                Text("STORE · FREE GAMES")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.6)
+                Text("每周精选免费游戏")
+                    .font(.system(size: 12))
                     .foregroundStyle(EpicStyle.secondary)
             }
-
             Spacer()
-
             Button {
                 Task { await store.loadGames() }
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.85))
                     .frame(width: 40, height: 40)
                     .background(EpicStyle.panelLight, in: Circle())
             }
@@ -1956,52 +1911,33 @@ private struct EpicHomeView: View {
     }
 
     private var heroPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("FREE GAMES")
-                .font(.system(size: 11, weight: .black))
-                .tracking(2.2)
-                .foregroundStyle(Color.black)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 5))
-
-            Text("免费游戏\n每周上新")
-                .font(.system(size: 32, weight: .black))
-                .foregroundStyle(.white)
-                .lineSpacing(1)
-
-            Text("领取后永久保留在你的 Epic 游戏库中（以商品具体领取规则为准）。")
-                .font(.system(size: 12))
-                .foregroundStyle(EpicStyle.secondary)
-                .lineSpacing(4)
-
-            HStack(spacing: 7) {
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 6, height: 6)
-
-                Text("限时领取 · 截止时间实时计算")
-                    .font(.system(size: 11, weight: .semibold))
+        HStack(alignment: .center, spacing: 18) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("本周精选")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(EpicStyle.secondary)
+                Text("免费游戏")
+                    .font(.system(size: 27, weight: .semibold))
+                    .tracking(-0.7)
                     .foregroundStyle(.white)
+                Text("限时领取，入库后按商店规则保留")
+                    .font(.system(size: 11))
+                    .foregroundStyle(EpicStyle.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.top, 2)
+            Spacer(minLength: 0)
+            Image(systemName: "gift")
+                .font(.system(size: 29, weight: .light))
+                .foregroundStyle(.white.opacity(0.88))
+                .frame(width: 66, height: 66)
+                .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 20))
         }
+        .padding(19)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(22)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(red: 0.22, green: 0.22, blue: 0.25),
-                    Color(red: 0.09, green: 0.09, blue: 0.105)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 18)
-        )
+        .background(EpicStyle.panel, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(EpicStyle.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(EpicStyle.border, lineWidth: 0.8)
         }
     }
 
@@ -2245,7 +2181,7 @@ private struct SupabaseUser: Decodable {
     let email: String?
 }
 
-private struct CloudFavorite: Decodable, Identifiable {
+private struct CloudFavorite: Codable, Identifiable {
     var store: String
     var app_id: String
     var game_name: String
@@ -2266,12 +2202,26 @@ private final class AppAccountStore: ObservableObject {
     @Published var message: String?
     @Published var isLoggedIn = false
     private let tokenKey = "app.supabase.access-token"
+    private let favoritesStorageKey = "app.favorites.local.v1"
     @Published var favoriteKeys: Set<String> = []
     @Published var favoriteRecords: [CloudFavorite] = []
     @Published var needsLoginPrompt = false
 
     func isFavorite(store: String, appID: String) -> Bool {
         favoriteKeys.contains("\(store):\(appID)")
+    }
+
+    private func persistLocalFavorites() {
+        guard let data = try? JSONEncoder().encode(favoriteRecords) else { return }
+        UserDefaults.standard.set(data, forKey: favoritesStorageKey)
+        favoriteKeys = Set(favoriteRecords.map { "\($0.store):\($0.app_id)" })
+    }
+
+    private func restoreLocalFavorites() {
+        guard let data = UserDefaults.standard.data(forKey: favoritesStorageKey),
+              let records = try? JSONDecoder().decode([CloudFavorite].self, from: data) else { return }
+        favoriteRecords = records
+        favoriteKeys = Set(records.map { "\($0.store):\($0.app_id)" })
     }
 
     func loadFavorites() async {
@@ -2283,62 +2233,80 @@ private final class AppAccountStore: ObservableObject {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return }
-            let rows = try JSONDecoder().decode([CloudFavorite].self, from: data)
-            favoriteRecords = rows
-            favoriteKeys = Set(rows.map { "\($0.store):\($0.app_id)" })
+            guard let status = (response as? HTTPURLResponse)?.statusCode, (200...299).contains(status) else {
+                message = "云端收藏暂不可用，本机收藏不受影响。"
+                return
+            }
+            let remoteRows = try JSONDecoder().decode([CloudFavorite].self, from: data)
+            var merged = favoriteRecords
+            for row in remoteRows where !merged.contains(where: { $0.id == row.id }) {
+                merged.append(row)
+            }
+            favoriteRecords = merged
+            persistLocalFavorites()
         } catch {
-            message = "读取云端收藏失败：\(error.localizedDescription)"
+            message = "云端收藏暂不可用，本机收藏不受影响。"
         }
     }
 
     func toggleFavorite(store: String, appID: String, name: String, imageURL: String, storeURL: String) async {
-        guard isLoggedIn, let token = readToken() else {
-            needsLoginPrompt = true
-            message = "请先登录，再使用云端收藏。"
-            return
-        }
         let key = "\(store):\(appID)"
-        guard let encodedID = appID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: SupabaseConfig.projectURL + "/rest/v1/game_favorites?store=eq.\(store)&app_id=eq.\(encodedID)") else { return }
-        var request = URLRequest(url: url)
-        request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let alreadySaved = favoriteKeys.contains(key)
+        if alreadySaved {
+            favoriteRecords.removeAll { $0.store == store && $0.app_id == appID }
+            persistLocalFavorites()
+            message = "已取消收藏。"
+        } else {
+            let record = CloudFavorite(store: store, app_id: appID, game_name: name, image_url: imageURL, store_url: storeURL)
+            favoriteRecords.insert(record, at: 0)
+            persistLocalFavorites()
+            message = isLoggedIn ? "已收藏，正在同步云端。" : "已收藏到本机。登录不是必需的。"
+        }
+
+        // 本机收藏始终立即生效；云端同步失败也不会丢失本机数据。
+        guard isLoggedIn, let token = readToken() else { return }
         do {
-            if favoriteKeys.contains(key) {
+            if alreadySaved {
+                guard var components = URLComponents(string: SupabaseConfig.projectURL + "/rest/v1/game_favorites") else { return }
+                components.queryItems = [
+                    URLQueryItem(name: "store", value: "eq.\(store)"),
+                    URLQueryItem(name: "app_id", value: "eq.\(appID)")
+                ]
+                guard let url = components.url else { return }
+                var request = URLRequest(url: url)
                 request.httpMethod = "DELETE"
+                request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                 let (_, response) = try await URLSession.shared.data(for: request)
                 guard let status = (response as? HTTPURLResponse)?.statusCode, (200...299).contains(status) else {
-                    message = "取消收藏失败，请稍后重试。"; return
+                    message = "本机已取消收藏，云端同步稍后重试。"
+                    return
                 }
-                favoriteKeys.remove(key)
-                favoriteRecords.removeAll { $0.store == store && $0.app_id == appID }
-                message = "已取消收藏。"
             } else {
-                guard let insertURL = URL(string: SupabaseConfig.projectURL + "/rest/v1/game_favorites") else { return }
-                var insert = URLRequest(url: insertURL)
-                insert.httpMethod = "POST"
-                insert.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
-                insert.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                insert.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                insert.setValue("resolution=merge-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
+                guard let url = URL(string: SupabaseConfig.projectURL + "/rest/v1/game_favorites") else { return }
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.setValue("resolution=merge-duplicates,return=minimal", forHTTPHeaderField: "Prefer")
                 let body: [String: Any] = ["store": store, "app_id": appID, "game_name": name,
                                            "image_url": imageURL, "store_url": storeURL]
-                insert.httpBody = try JSONSerialization.data(withJSONObject: body)
-                let (_, response) = try await URLSession.shared.data(for: insert)
+                request.httpBody = try JSONSerialization.data(withJSONObject: body)
+                let (_, response) = try await URLSession.shared.data(for: request)
                 guard let status = (response as? HTTPURLResponse)?.statusCode, (200...299).contains(status) else {
-                    message = "收藏失败，请检查数据库字段类型和网络。"; return
+                    message = "已保存在本机；云端同步失败，请检查 Supabase 表权限。"
+                    return
                 }
-                favoriteKeys.insert(key)
-                favoriteRecords.insert(CloudFavorite(store: store, app_id: appID, game_name: name, image_url: imageURL, store_url: storeURL), at: 0)
-                message = "已加入收藏。"
+                message = "收藏成功，已同步云端。"
             }
         } catch {
-            message = "收藏操作失败：\(error.localizedDescription)"
+            message = "本机收藏已保存，云端同步失败：\(error.localizedDescription)"
         }
     }
 
     init() {
+        restoreLocalFavorites()
         if let token = readToken(), !token.isEmpty {
             isLoggedIn = true
         }
@@ -2444,8 +2412,8 @@ private final class AppAccountStore: ObservableObject {
             _ = try? await URLSession.shared.data(for: request)
         }
         deleteToken(); email = ""; isLoggedIn = false
-        favoriteKeys = []; favoriteRecords = []
-        message = "已退出登录。"
+        // 收藏是本机数据，退出账户后仍然保留。
+        message = "已退出登录，本机收藏仍会保留。"
     }
 
     private func saveToken(_ token: String) {
@@ -2468,6 +2436,100 @@ private final class AppAccountStore: ObservableObject {
     private func deleteToken() {
         SecItemDelete([kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: tokenKey] as CFDictionary)
+    }
+}
+
+private struct FavoritesHomeView: View {
+    @ObservedObject var account: AppAccountStore
+
+    var body: some View {
+        ZStack {
+            SteamStyle.background.ignoresSafeArea()
+            if account.favoriteRecords.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "heart")
+                        .font(.system(size: 34, weight: .light))
+                        .foregroundStyle(SteamStyle.secondary)
+                    Text("还没有收藏")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Text("在 Steam 或 Epic 游戏卡片上点按心形，即可保存到这里。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(SteamStyle.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 28)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 11) {
+                        ForEach(account.favoriteRecords) { item in
+                            HStack(spacing: 12) {
+                                AsyncImage(url: URL(string: item.image_url)) { phase in
+                                    if let image = phase.image {
+                                        image.resizable().scaledToFill()
+                                    } else {
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .fill(SteamStyle.cardLight)
+                                            .overlay {
+                                                Image(systemName: "gamecontroller")
+                                                    .foregroundStyle(SteamStyle.secondary)
+                                            }
+                                    }
+                                }
+                                .frame(width: 104, height: 66)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(item.game_name)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .lineLimit(2)
+                                    Text(item.store.uppercased())
+                                        .font(.system(size: 10, weight: .medium))
+                                        .tracking(1)
+                                        .foregroundStyle(SteamStyle.secondary)
+                                }
+                                Spacer(minLength: 4)
+                                Button {
+                                    Task {
+                                        await account.toggleFavorite(
+                                            store: item.store,
+                                            appID: item.app_id,
+                                            name: item.game_name,
+                                            imageURL: item.image_url,
+                                            storeURL: item.store_url
+                                        )
+                                    }
+                                } label: {
+                                    Image(systemName: "heart.fill")
+                                        .font(.system(size: 17))
+                                        .foregroundStyle(SteamStyle.green)
+                                        .frame(width: 38, height: 38)
+                                        .background(SteamStyle.cardLight, in: Circle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("取消收藏")
+                            }
+                            .padding(12)
+                            .premiumSurface(radius: 16)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if let url = URL(string: item.store_url) {
+                                    UIApplication.shared.open(url)
+                                }
+                            }
+                        }
+                    }
+                    .padding(18)
+                    .frame(maxWidth: 620)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .navigationTitle("我的收藏")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
     }
 }
 
@@ -2621,7 +2683,12 @@ private struct AccountHomeView: View {
     private var quickActions: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("我的游戏").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
-            actionRow("我的收藏", subtitle: "Steam + Epic · \(account.favoriteRecords.count) 款", icon: "heart.fill")
+            NavigationLink {
+                FavoritesHomeView(account: account)
+            } label: {
+                actionRow("我的收藏", subtitle: "Steam + Epic · \(account.favoriteRecords.count) 款", icon: "heart.fill")
+            }
+            .buttonStyle(.plain)
             actionRow("最近浏览", subtitle: "回到刚刚看过的游戏", icon: "clock.fill")
             actionRow("发行日历", subtitle: "关注近期即将发行的游戏", icon: "calendar")
         }.padding(16).background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 18))
