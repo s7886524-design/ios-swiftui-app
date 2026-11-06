@@ -2787,39 +2787,13 @@ private struct AccountHomeView: View {
                         if account.isLoggedIn {
                             profileCard
                             checkinCard
-                            quickActions
-                            settingsCard
-                            accountActions
                         } else {
                             guestHeader
                             authCard
-                            NavigationLink {
-                                FavoritesHomeView(account: account)
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "heart.fill")
-                                        .foregroundStyle(SteamStyle.green)
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("我的收藏")
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundStyle(.white)
-                                        Text("本机保存 · 无需登录")
-                                            .font(.system(size: 11))
-                                            .foregroundStyle(SteamStyle.secondary)
-                                    }
-                                    Spacer()
-                                    Text("\(account.favoriteRecords.count)")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(SteamStyle.secondary)
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundStyle(SteamStyle.secondary)
-                                }
-                                .padding(16)
-                                .premiumSurface(radius: 16)
-                            }
-                            .buttonStyle(.plain)
                         }
+                        quickActions
+                        settingsCard
+                        if account.isLoggedIn { accountActions }
                         if let message = account.message {
                             Text(message).font(.system(size: 12)).foregroundStyle(SteamStyle.cyan)
                                 .frame(maxWidth: .infinity, alignment: .leading).padding(13)
@@ -2921,35 +2895,35 @@ private struct AccountHomeView: View {
     }
 
     private var quickActions: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("我的游戏").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
-            NavigationLink {
-                FavoritesHomeView(account: account)
-            } label: {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("我的游戏").font(.system(size: 16, weight: .bold)).foregroundStyle(.white).padding(.bottom, 4)
+            NavigationLink { FavoritesHomeView(account: account) } label: {
                 actionRow("我的收藏", subtitle: "Steam + Epic · \(account.favoriteRecords.count) 款", icon: "heart.fill")
-            }
-            .buttonStyle(.plain)
-            actionRow("最近浏览", subtitle: "回到刚刚看过的游戏", icon: "clock.fill")
-            actionRow("发行日历", subtitle: "关注近期即将发行的游戏", icon: "calendar")
+            }.buttonStyle(.plain)
+            NavigationLink { RecentBrowsingHomeView() } label: {
+                actionRow("最近浏览", subtitle: "回到刚刚看过的游戏", icon: "clock.fill")
+            }.buttonStyle(.plain)
+            NavigationLink { ReleaseCalendarHomeView() } label: {
+                actionRow("发行日历", subtitle: "Steam 发售计划与全球新游动态", icon: "calendar")
+            }.buttonStyle(.plain)
         }.padding(16).background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 18))
     }
 
     private var settingsCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("偏好与设置").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
-            Button { showSettings = true } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "slider.horizontal.3").foregroundStyle(SteamStyle.cyan).frame(width: 26)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("外观与设置").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                        Text(appearanceLabel).font(.system(size: 10)).foregroundStyle(SteamStyle.secondary)
-                    }
-                    Spacer(); Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold)).foregroundStyle(SteamStyle.secondary)
-                }.padding(.vertical, 7)
+        VStack(alignment: .leading, spacing: 4) {
+            Text("偏好与设置").font(.system(size: 16, weight: .bold)).foregroundStyle(.white).padding(.bottom, 4)
+            NavigationLink { AppearanceSettingsHomeView() } label: {
+                actionRow("外观与设置", subtitle: appearanceLabel, icon: "slider.horizontal.3")
             }.buttonStyle(.plain)
-            actionRow("账户安全", subtitle: "邮箱账户由 Supabase 安全管理", icon: "lock.shield")
-            actionRow("意见反馈", subtitle: "帮助我们改进限免领取", icon: "bubble.left")
-            actionRow("关于我们", subtitle: "版本信息与服务说明", icon: "info.circle")
+            NavigationLink { AccountSecurityHomeView(account: account) } label: {
+                actionRow("账户安全", subtitle: "邮箱账户与本机凭据说明", icon: "lock.shield")
+            }.buttonStyle(.plain)
+            NavigationLink { FeedbackHomeView() } label: {
+                actionRow("意见反馈", subtitle: "提交建议或分享问题描述", icon: "bubble.left")
+            }.buttonStyle(.plain)
+            NavigationLink { AboutHomeView() } label: {
+                actionRow("关于我们", subtitle: "版本信息与服务说明", icon: "info.circle")
+            }.buttonStyle(.plain)
         }.padding(16).background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 18))
     }
 
@@ -3037,7 +3011,11 @@ private struct AccountHomeView: View {
             }
             Spacer()
             Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundStyle(SteamStyle.secondary)
-        }.padding(.vertical, 6)
+        }
+        .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+        .contentShape(Rectangle())
+        .padding(.horizontal, 2)
+        .padding(.vertical, 5)
     }
 
     private func modeButton(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
