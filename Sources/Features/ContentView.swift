@@ -2747,6 +2747,235 @@ private struct FavoritesHomeView: View {
     }
 }
 
+private struct RecentBrowsingHomeView: View {
+    @AppStorage("app.recent.games.v1") private var recentRaw = ""
+    private var records: [RecentGameRecord] { RecentGameHistory.load() }
+
+    var body: some View {
+        ZStack {
+            SteamStyle.background.ignoresSafeArea()
+            if records.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "clock").font(.system(size: 34)).foregroundStyle(SteamStyle.cyan)
+                    Text("暂无浏览记录").font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                    Text("从 Steam 或 Epic 打开游戏商店后，记录会自动保存在这里。")
+                        .font(.system(size: 11)).foregroundStyle(SteamStyle.secondary).multilineTextAlignment(.center)
+                }.padding(28).frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 10) {
+                        ForEach(records) { item in
+                            Button {
+                                if let url = URL(string: item.storeURL) { UIApplication.shared.open(url) }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    AsyncImage(url: URL(string: item.imageURL)) { phase in
+                                        if let image = phase.image { image.resizable().scaledToFill() }
+                                        else { RoundedRectangle(cornerRadius: 9).fill(SteamStyle.cardLight) }
+                                    }.frame(width: 108, height: 68).clipShape(RoundedRectangle(cornerRadius: 9))
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(item.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).lineLimit(2)
+                                        Text(item.store.uppercased()).font(.system(size: 10, weight: .medium)).foregroundStyle(SteamStyle.cyan)
+                                        Text(item.visitedAt.formatted(date: .abbreviated, time: .shortened)).font(.system(size: 10)).foregroundStyle(SteamStyle.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right").foregroundStyle(SteamStyle.secondary)
+                                }.padding(12).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).premiumSurface(radius: 14)
+                            }.buttonStyle(.plain)
+                        }
+                    }.padding(18).frame(maxWidth: 620).frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .navigationTitle("最近浏览").navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            if !records.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("清空") { RecentGameHistory.clear(); recentRaw = "" }.foregroundStyle(SteamStyle.cyan)
+                }
+            }
+        }
+    }
+}
+
+private struct ReleaseCalendarHomeView: View {
+    @StateObject private var upcoming = SteamUpcomingStore()
+    @StateObject private var news = GameNewsStore()
+
+    var body: some View {
+        ZStack {
+            SteamStyle.background.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 15) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("发行日历").font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
+                            Text("Steam 发售计划与全球新游动态").font(.system(size: 11)).foregroundStyle(SteamStyle.secondary)
+                        }
+                        Spacer()
+                        Button {
+                            Task { await upcoming.loadGames(); await news.load() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise").foregroundStyle(SteamStyle.cyan)
+                                .frame(width: 40, height: 40).background(SteamStyle.cardLight, in: Circle())
+                        }.buttonStyle(.plain)
+                    }
+                    HStack(spacing: 10) {
+                        Link(destination: URL(string: "https://steamdb.info/upcoming/")!) {
+                            Label("SteamDB 发售日历", systemImage: "calendar")
+                                .font(.system(size: 11, weight: .semibold)).frame(maxWidth: .infinity).padding(12)
+                                .background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        Link(destination: URL(string: "https://store.steampowered.com/search/?filter=comingsoon")!) {
+                            Label("Steam 即将推出", systemImage: "gamecontroller")
+                                .font(.system(size: 11, weight: .semibold)).frame(maxWidth: .infinity).padding(12)
+                                .background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                    }.foregroundStyle(SteamStyle.cyan)
+                    Text("Steam 即将发售").font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
+                    if upcoming.isLoading && upcoming.games.isEmpty {
+                        ProgressView().tint(SteamStyle.cyan).frame(maxWidth: .infinity).padding()
+                    } else if !upcoming.games.isEmpty {
+                        ForEach(upcoming.games) { game in
+                            Button {
+                                RecentGameHistory.record(store: "steam", appID: String(game.id), name: game.name, imageURL: game.imageURL, storeURL: game.storeURL.absoluteString)
+                                UIApplication.shared.open(game.storeURL)
+                            } label: {
+                                HStack(spacing: 11) {
+                                    AsyncImage(url: URL(string: game.imageURL)) { phase in
+                                        if let image = phase.image { image.resizable().scaledToFill() }
+                                        else { RoundedRectangle(cornerRadius: 8).fill(SteamStyle.cardLight) }
+                                    }.frame(width: 100, height: 62).clipShape(RoundedRectangle(cornerRadius: 8))
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(game.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).lineLimit(2)
+                                        Text(game.releaseText).font(.system(size: 10)).foregroundStyle(SteamStyle.cyan)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right").foregroundStyle(SteamStyle.secondary)
+                                }.padding(11).frame(maxWidth: .infinity, alignment: .leading).premiumSurface(radius: 13)
+                            }.buttonStyle(.plain)
+                        }
+                    } else {
+                        Text(upcoming.errorMessage ?? "暂时没有解析到发行日期，可通过上方 SteamDB 日历查看完整列表。")
+                            .font(.system(size: 11)).foregroundStyle(SteamStyle.secondary).padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading).premiumSurface(radius: 12)
+                    }
+                    Text("最新新游资讯").font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
+                    if news.isLoading && news.items.isEmpty {
+                        ProgressView().tint(SteamStyle.cyan).frame(maxWidth: .infinity).padding()
+                    } else if !news.items.isEmpty {
+                        ForEach(Array(news.items.prefix(12))) { item in GameNewsCard(item: item) }
+                    } else {
+                        Text(news.errorMessage ?? "资讯暂时不可用，请稍后刷新。").font(.system(size: 11)).foregroundStyle(SteamStyle.secondary)
+                    }
+                }.padding(18).frame(maxWidth: 600).frame(maxWidth: .infinity)
+            }.refreshable { await upcoming.loadGames(); await news.load() }
+        }
+        .navigationTitle("发行日历").navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .task {
+            if upcoming.games.isEmpty { await upcoming.loadGames() }
+            if news.items.isEmpty { await news.load() }
+        }
+    }
+}
+
+private struct AppearanceSettingsHomeView: View {
+    @AppStorage("app.appearance") private var appearance = "dark"
+    private let options = [("dark", "深色模式", "moon.fill"), ("light", "浅色模式", "sun.max.fill"), ("system", "跟随系统", "iphone")]
+
+    var body: some View {
+        ZStack {
+            SteamStyle.background.ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 13) {
+                Text("选择快领在 iPhone 上的显示方式。").font(.system(size: 12)).foregroundStyle(SteamStyle.secondary)
+                ForEach(options, id: \.0) { option in
+                    Button { appearance = option.0 } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: option.2).foregroundStyle(SteamStyle.cyan).frame(width: 26)
+                            Text(option.1).foregroundStyle(.white)
+                            Spacer()
+                            if appearance == option.0 { Image(systemName: "checkmark.circle.fill").foregroundStyle(SteamStyle.cyan) }
+                        }.padding(16).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).premiumSurface(radius: 13)
+                    }.buttonStyle(.plain)
+                }
+                Spacer()
+            }.padding(18).frame(maxWidth: 560).frame(maxWidth: .infinity, alignment: .top)
+        }
+        .navigationTitle("外观与设置").navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+}
+
+private struct AccountSecurityHomeView: View {
+    @ObservedObject var account: AppAccountStore
+    var body: some View {
+        ZStack {
+            SteamStyle.background.ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 15) {
+                Image(systemName: "lock.shield.fill").font(.system(size: 34)).foregroundStyle(SteamStyle.cyan)
+                Text("账户安全").font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("当前账户").font(.system(size: 11)).foregroundStyle(SteamStyle.secondary)
+                    Text(account.isLoggedIn ? account.email : "未登录").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                }.padding(16).frame(maxWidth: .infinity, alignment: .leading).premiumSurface(radius: 14)
+                Text("快领账户由 Supabase Auth 管理。登录凭据保存在 iPhone 钥匙串中。快领不会索取或保存你的 Steam 密码。")
+                    .font(.system(size: 12)).foregroundStyle(SteamStyle.secondary).lineSpacing(5)
+                Spacer()
+            }.padding(20).frame(maxWidth: 560).frame(maxWidth: .infinity, alignment: .top)
+        }
+        .navigationTitle("账户安全").navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+}
+
+private struct FeedbackHomeView: View {
+    @State private var message = ""
+    var body: some View {
+        ZStack {
+            SteamStyle.background.ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 13) {
+                Text("意见反馈").font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
+                Text("告诉我们你遇到的问题或希望增加的功能。").font(.system(size: 12)).foregroundStyle(SteamStyle.secondary)
+                TextEditor(text: $message).scrollContentBackground(.hidden).padding(10).frame(minHeight: 190)
+                    .background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 14)).foregroundStyle(.white)
+                ShareLink(item: "快领意见反馈：\n\n" + message) {
+                    Label("分享反馈内容", systemImage: "square.and.arrow.up")
+                        .font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                        .frame(maxWidth: .infinity).frame(height: 48).background(SteamStyle.green, in: RoundedRectangle(cornerRadius: 12))
+                }
+                Text("通过系统分享菜单发送反馈，或复制后粘贴到反馈渠道。").font(.system(size: 10)).foregroundStyle(SteamStyle.secondary)
+                Spacer()
+            }.padding(18).frame(maxWidth: 560).frame(maxWidth: .infinity, alignment: .top)
+        }
+        .navigationTitle("意见反馈").navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+}
+
+private struct AboutHomeView: View {
+    private var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "未知" }
+    private var build: String { Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "未知" }
+    var body: some View {
+        ZStack {
+            SteamStyle.background.ignoresSafeArea()
+            VStack(spacing: 14) {
+                Image(systemName: "gamecontroller.fill").font(.system(size: 42)).foregroundStyle(SteamStyle.cyan)
+                    .frame(width: 88, height: 88).background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 24))
+                Text("快领").font(.system(size: 25, weight: .bold)).foregroundStyle(.white)
+                Text("发现限时免费游戏，追踪新游动态。").font(.system(size: 12)).foregroundStyle(SteamStyle.secondary)
+                Text("版本 \(version)（\(build)）").font(.system(size: 11)).foregroundStyle(SteamStyle.secondary)
+                Text("游戏价格、领取状态与发行日期以 Steam、Epic 及游戏发行商官方页面为准。")
+                    .font(.system(size: 11)).foregroundStyle(SteamStyle.secondary).multilineTextAlignment(.center).padding(.top, 12)
+                Spacer()
+            }.padding(24).frame(maxWidth: 560).frame(maxWidth: .infinity)
+        }
+        .navigationTitle("关于我们").navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+}
+
 private struct AccountHomeView: View {
     @ObservedObject var account: AppAccountStore
     @AppStorage("app.profile.nickname") private var nickname = ""
