@@ -2579,6 +2579,32 @@ private struct AccountHomeView: View {
                         } else {
                             guestHeader
                             authCard
+                            NavigationLink {
+                                FavoritesHomeView(account: account)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "heart.fill")
+                                        .foregroundStyle(SteamStyle.green)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text("我的收藏")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundStyle(.white)
+                                        Text("本机保存 · 无需登录")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(SteamStyle.secondary)
+                                    }
+                                    Spacer()
+                                    Text("\(account.favoriteRecords.count)")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(SteamStyle.secondary)
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(SteamStyle.secondary)
+                                }
+                                .padding(16)
+                                .premiumSurface(radius: 16)
+                            }
+                            .buttonStyle(.plain)
                         }
                         if let message = account.message {
                             Text(message).font(.system(size: 12)).foregroundStyle(SteamStyle.cyan)
