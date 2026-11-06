@@ -2315,6 +2315,7 @@ private struct EpicGameCard: View {
                 }
 
                 Button {
+                    RecentGameHistory.record(store: "epic", appID: game.id, name: game.name, imageURL: game.imageURL, storeURL: game.storeURL.absoluteString)
                     UIApplication.shared.open(game.storeURL)
                 } label: {
                     HStack(spacing: 8) {
