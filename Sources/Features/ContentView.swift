@@ -1619,6 +1619,7 @@ private struct GameCard: View {
                 .padding(.vertical, 11)
 
             Button {
+                RecentGameHistory.record(store: "steam", appID: String(game.id), name: game.name, imageURL: game.imageURL, storeURL: game.storeURL.absoluteString)
                 UIApplication.shared.open(game.storeURL)
             } label: {
                 HStack(spacing: 8) {
@@ -1984,6 +1985,7 @@ private struct SteamSearchGameCard: View {
 
     var body: some View {
         Button {
+            RecentGameHistory.record(store: "steam", appID: String(game.id), name: game.name, imageURL: game.imageURL, storeURL: game.storeURL.absoluteString)
             UIApplication.shared.open(game.storeURL)
         } label: {
             HStack(spacing: 12) {
