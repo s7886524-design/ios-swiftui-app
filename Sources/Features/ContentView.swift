@@ -92,6 +92,35 @@ struct SteamUpcomingGame: Identifiable, Hashable {
 
 // 新增：Steam 搜索结果
 
+private struct RecentGameRecord: Codable, Identifiable {
+    let store: String
+    let appID: String
+    let name: String
+    let imageURL: String
+    let storeURL: String
+    let visitedAt: Date
+    var id: String { "\(store):\(appID)" }
+}
+
+private enum RecentGameHistory {
+    static let key = "app.recent.games.v1"
+    static func record(store: String, appID: String, name: String, imageURL: String, storeURL: String) {
+        var records = load()
+        let id = "\(store):\(appID)"
+        records.removeAll { $0.id == id }
+        records.insert(RecentGameRecord(store: store, appID: appID, name: name, imageURL: imageURL, storeURL: storeURL, visitedAt: Date()), at: 0)
+        let data = try? JSONEncoder().encode(Array(records.prefix(100)))
+        UserDefaults.standard.set(data?.base64EncodedString() ?? "", forKey: key)
+    }
+    static func load() -> [RecentGameRecord] {
+        guard let raw = UserDefaults.standard.string(forKey: key),
+              let data = Data(base64Encoded: raw),
+              let records = try? JSONDecoder().decode([RecentGameRecord].self, from: data) else { return [] }
+        return records.sorted { $0.visitedAt > $1.visitedAt }
+    }
+    static func clear() { UserDefaults.standard.removeObject(forKey: key) }
+}
+
 struct SteamSearchGame: Identifiable, Hashable {
     let id: Int
     let name: String
