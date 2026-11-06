@@ -110,6 +110,147 @@ struct SteamSearchGame: Identifiable, Hashable {
     }
 }
 
+
+struct GameNewsItem: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let summary: String
+    let link: URL
+    let source: String
+    let publishedAt: Date?
+    let imageURL: String
+}
+
+private struct GameNewsFeed {
+    let name: String
+    let url: URL
+}
+
+private final class GameNewsRSSParser: NSObject, XMLParserDelegate {
+    private(set) var items: [[String: String]] = []
+    private var currentItem: [String: String] = [:]
+    private var textBuffer = ""
+    private var insideItem = false
+
+    func parse(_ data: Data) -> [[String: String]] {
+        let parser = XMLParser(data: data)
+        parser.delegate = self
+        parser.shouldResolveExternalEntities = false
+        _ = parser.parse()
+        return items
+    }
+
+    func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
+        let name = (qName ?? elementName).lowercased()
+        if name == "item" || name == "entry" {
+            insideItem = true
+            currentItem = [:]
+        }
+        guard insideItem else { return }
+        textBuffer = ""
+        if name == "enclosure" || name == "media:content" || name == "media:thumbnail" {
+            if let image = attributeDict["url"], !image.isEmpty { currentItem["image"] = image }
+        }
+        if name == "link", let href = attributeDict["href"], !href.isEmpty { currentItem["link"] = href }
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        if insideItem { textBuffer += string }
+    }
+
+    func parser(_ parser: XMLParser, foundCDATA CDATABlock: Data) {
+        if insideItem, let value = String(data: CDATABlock, encoding: .utf8) { textBuffer += value }
+    }
+
+    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+        let name = (qName ?? elementName).lowercased()
+        if insideItem {
+            let value = textBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty {
+                if name == "description" || name == "summary" || name == "content:encoded" { currentItem["summary"] = value }
+                else if ["title", "link", "pubdate", "published", "updated"].contains(name) { currentItem[name] = value }
+            }
+            if name == "item" || name == "entry" {
+                items.append(currentItem)
+                currentItem = [:]
+                insideItem = false
+            }
+        }
+        textBuffer = ""
+    }
+}
+
+enum GameNewsAPI {
+    private static let feeds = [
+        GameNewsFeed(name: "Gematsu", url: URL(string: "https://www.gematsu.com/feed")!),
+        GameNewsFeed(name: "3DM游戏", url: URL(string: "https://www.3dmgame.com/rss.xml")!),
+        GameNewsFeed(name: "游民星空", url: URL(string: "https://www.gamersky.com/rss/")!)
+    ]
+
+    static func fetchNews() async throws -> [GameNewsItem] {
+        var collected: [GameNewsItem] = []
+        for feed in feeds {
+            do {
+                var request = URLRequest(url: feed.url)
+                request.timeoutInterval = 18
+                request.setValue("application/rss+xml, application/atom+xml, application/xml, text/xml, */*", forHTTPHeaderField: "Accept")
+                request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { continue }
+                let parser = GameNewsRSSParser()
+                let parsed = parser.parse(data)
+                for item in parsed {
+                    let title = clean(item["title"] ?? "")
+                    let rawLink = clean(item["link"] ?? "")
+                    guard !title.isEmpty, let link = URL(string: rawLink), ["http", "https"].contains(link.scheme?.lowercased() ?? "") else { continue }
+                    let summary = clean(item["summary"] ?? "")
+                    let searchable = (title + " " + summary).lowercased()
+                    let keywords = ["game", "games", "游戏", "发售", "发行", "预告", "公布", "公开", "steam", "pc", "playstation", "xbox", "switch", "任天堂", "育碧", "索尼", "微软", "开发"]
+                    guard keywords.contains(where: { searchable.contains($0) }) else { continue }
+                    let dateText = item["pubdate"] ?? item["published"] ?? item["updated"] ?? ""
+                    collected.append(GameNewsItem(id: link.absoluteString, title: title, summary: String(summary.prefix(220)), link: link, source: feed.name, publishedAt: parseDate(dateText), imageURL: item["image"] ?? ""))
+                }
+            } catch {
+                continue
+            }
+        }
+        var seen = Set<String>()
+        let unique = collected.filter { seen.insert($0.link.absoluteString).inserted }
+        let sorted = unique.sorted { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) }
+        guard !sorted.isEmpty else {
+            throw NSError(domain: "GameNewsAPI", code: -1, userInfo: [NSLocalizedDescriptionKey: "暂时无法从游戏资讯源获取内容，请下拉刷新或稍后重试。"])
+        }
+        return Array(sorted.prefix(80))
+    }
+
+    private static func clean(_ value: String) -> String {
+        var text = value
+        let replacements: [(String, String)] = [
+            ("(?is)<script[^>]*>.*?</script>", " "),
+            ("(?is)<style[^>]*>.*?</style>", " "),
+            ("(?is)<[^>]+>", " "),
+            ("&#8217;|&#x27;", "'"),
+            ("&amp;", "&"),
+            ("&quot;", "\""),
+            ("&nbsp;", " ")
+        ]
+        for (pattern, replacement) in replacements {
+            text = text.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
+        }
+        return text.replacingOccurrences(of: "\\\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func parseDate(_ value: String) -> Date? {
+        for format in ["EEE, dd MMM yyyy HH:mm:ss Z", "EEE, d MMM yyyy HH:mm:ss Z", "yyyy-MM-dd'T'HH:mm:ssZ", "yyyy-MM-dd'T'HH:mm:ssXXXXX"] {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = format
+            if let date = formatter.date(from: value) { return date }
+        }
+        return nil
+    }
+}
+
 // MARK: - Epic 模型
 
 struct EpicGame: Identifiable, Hashable {
@@ -855,6 +996,22 @@ final class SteamFreeStore: ObservableObject {
 }
 
 @MainActor
+final class GameNewsStore: ObservableObject {
+    @Published var items: [GameNewsItem] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+
+    func load() async {
+        guard !isLoading else { return }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do { items = try await GameNewsAPI.fetchNews() }
+        catch { errorMessage = error.localizedDescription }
+    }
+}
+
+@MainActor
 final class SteamUpcomingStore: ObservableObject {
     @Published var games: [SteamUpcomingGame] = []
     @Published var isLoading = false
@@ -1078,12 +1235,12 @@ private struct SteamHomeView: View {
     private var featureEntry: some View {
         VStack(spacing: 11) {
             NavigationLink {
-                SteamUpcomingHomeView()
+                GameNewsHomeView()
             } label: {
                 featureRow(
-                    icon: "gamecontroller.fill",
-                    title: "Steam 即将推出",
-                    subtitle: "查看未来两个月计划发行的游戏",
+                    icon: "sparkles.rectangle.stack",
+                    title: "新游情报",
+                    subtitle: "汇总全球新作首曝、预告与发售动态",
                     color: SteamStyle.green
                 )
             }
@@ -1490,17 +1647,25 @@ private struct GameCard: View {
     }
 }
 
-// MARK: - Steam 即将推出页面
+// MARK: - 新游情报页面
 
-private struct SteamUpcomingHomeView: View {
-    @StateObject private var store = SteamUpcomingStore()
-    @State private var selectedRange = 0
+private struct GameNewsHomeView: View {
+    @StateObject private var store = GameNewsStore()
+    @State private var selectedFilter = "全部"
 
-    private var displayedGames: [SteamUpcomingGame] {
-        guard selectedRange == 1 else { return store.games }
-        return store.games.filter {
-            guard let date = $0.releaseDate else { return false }
-            return Calendar.current.isDate(date, equalTo: Date(), toGranularity: .month)
+    private var displayedItems: [GameNewsItem] {
+        switch selectedFilter {
+        case "新作预告":
+            return store.items.filter {
+                let value = ($0.title + $0.summary).lowercased()
+                return ["预告", "首曝", "公布", "公开", "trailer", "announce", "reveal"].contains { value.contains($0) }
+            }
+        case "近期动态":
+            return store.items.filter {
+                guard let date = $0.publishedAt else { return true }
+                return date >= Calendar.current.date(byAdding: .day, value: -14, to: Date())!
+            }
+        default: return store.items
         }
     }
 
@@ -1508,104 +1673,124 @@ private struct SteamUpcomingHomeView: View {
         ZStack {
             SteamStyle.background.ignoresSafeArea()
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 18) {
+                VStack(alignment: .leading, spacing: 16) {
                     header
-                    Picker("发行范围", selection: $selectedRange) {
-                        Text("未来 60 天").tag(0)
-                        Text("本月发行").tag(1)
+                    HStack(spacing: 8) {
+                        ForEach(["全部", "新作预告", "近期动态"], id: \.self) { filter in
+                            Button { selectedFilter = filter } label: {
+                                Text(filter).font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(selectedFilter == filter ? .white : SteamStyle.secondary)
+                                    .padding(.horizontal, 14).padding(.vertical, 9)
+                                    .background(selectedFilter == filter ? SteamStyle.cardLight : SteamStyle.card, in: Capsule())
+                            }.buttonStyle(.plain)
+                        }
                     }
-                    .pickerStyle(.segmented)
-                    .tint(SteamStyle.cyan)
-
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("即将登陆 Steam")
-                                .font(.system(size: 19, weight: .bold)).foregroundStyle(.white)
-                            Text("按预计发行日期排序 · 最多展示未来 60 天")
-                                .font(.system(size: 11)).foregroundStyle(SteamStyle.secondary)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("全球游戏动态").font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
+                            Text("来自游戏媒体的首曝、预告和发行消息").font(.system(size: 10)).foregroundStyle(SteamStyle.secondary)
                         }
                         Spacer()
-                        Text("\(displayedGames.count) 款")
-                            .font(.system(size: 12, weight: .bold)).foregroundStyle(SteamStyle.cyan)
+                        Text("\(displayedItems.count) 条").font(.system(size: 12, weight: .semibold)).foregroundStyle(SteamStyle.cyan)
                     }
-
-                    if store.isLoading && store.games.isEmpty {
-                        VStack(spacing: 12) { ProgressView().tint(SteamStyle.cyan); Text("正在获取 Steam 即将推出的游戏…").foregroundStyle(SteamStyle.secondary) }.padding(.vertical, 40)
-                    } else if let error = store.errorMessage, store.games.isEmpty {
+                    if store.isLoading && store.items.isEmpty {
                         VStack(spacing: 10) {
-                            Image(systemName: "calendar.badge.exclamationmark").font(.system(size: 32)).foregroundStyle(SteamStyle.cyan)
-                            Text(error).font(.system(size: 13)).foregroundStyle(SteamStyle.secondary).multilineTextAlignment(.center)
-                            Button("重新加载") { Task { await store.loadGames() } }.foregroundStyle(SteamStyle.cyan)
+                            ProgressView().tint(SteamStyle.cyan)
+                            Text("正在汇总游戏资讯…").font(.system(size: 12)).foregroundStyle(SteamStyle.secondary)
+                        }.frame(maxWidth: .infinity).padding(.vertical, 42)
+                    } else if let error = store.errorMessage, store.items.isEmpty {
+                        VStack(spacing: 10) {
+                            Image(systemName: "newspaper").font(.system(size: 32)).foregroundStyle(SteamStyle.cyan)
+                            Text("暂时没有获取到资讯").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                            Text(error).font(.system(size: 11)).foregroundStyle(SteamStyle.secondary).multilineTextAlignment(.center)
+                            Button("重新加载") { Task { await store.load() } }.foregroundStyle(SteamStyle.cyan)
                         }.frame(maxWidth: .infinity).padding(24).background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 16))
-                    } else if displayedGames.isEmpty {
-                        Text("这个时间范围内暂无已确认发行日期的游戏").font(.system(size: 13)).foregroundStyle(SteamStyle.secondary).padding(.vertical, 35)
+                    } else if displayedItems.isEmpty {
+                        Text("当前分类暂时没有资讯").font(.system(size: 12)).foregroundStyle(SteamStyle.secondary).frame(maxWidth: .infinity).padding(.vertical, 30)
                     } else {
-                        LazyVStack(spacing: 13) {
-                            ForEach(displayedGames) { game in
-                                SteamUpcomingGameCard(game: game)
-                            }
+                        LazyVStack(spacing: 11) {
+                            ForEach(displayedItems) { item in GameNewsCard(item: item) }
                         }
                     }
-                    Text("发行日期以 Steam 商店页面为准；Steam 可能随时调整游戏发行计划。未确定日期的商品暂不显示。")
-                        .font(.system(size: 10)).foregroundStyle(SteamStyle.secondary).lineSpacing(3)
-                        .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
+                    Text("资讯来自公开游戏媒体 RSS。标题、摘要及发布时间以原始来源为准；点击卡片可查看原文。")
+                        .font(.system(size: 10)).foregroundStyle(SteamStyle.secondary).lineSpacing(3).padding(.top, 4)
                 }
                 .frame(maxWidth: 560).frame(maxWidth: .infinity)
-                .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 30)
+                .padding(.horizontal, 18).padding(.top, 18).padding(.bottom, 30)
             }
-            .refreshable { await store.loadGames() }
+            .refreshable { await store.load() }
         }
-        .navigationTitle("Steam 即将推出").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("新游情报").navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .task { if store.games.isEmpty { await store.loadGames() } }
+        .task { if store.items.isEmpty { await store.load() } }
     }
 
     private var header: some View {
         HStack(spacing: 12) {
-            Image(systemName: "calendar.badge.clock").font(.system(size: 28, weight: .bold)).foregroundStyle(SteamStyle.cyan)
-                .frame(width: 56, height: 56).background(SteamStyle.cyan.opacity(0.13), in: RoundedRectangle(cornerRadius: 16))
+            Image(systemName: "sparkles.rectangle.stack").font(.system(size: 26, weight: .semibold)).foregroundStyle(SteamStyle.cyan)
+                .frame(width: 54, height: 54).background(SteamStyle.cyan.opacity(0.12), in: RoundedRectangle(cornerRadius: 15))
             VStack(alignment: .leading, spacing: 4) {
-                Text("COMING SOON").font(.system(size: 10, weight: .black)).tracking(2).foregroundStyle(SteamStyle.cyan)
-                Text("近期即将上架").font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
-                Text("提前发现值得关注的新游戏").font(.system(size: 11)).foregroundStyle(SteamStyle.secondary)
+                Text("GAME RADAR").font(.system(size: 10, weight: .black)).tracking(2).foregroundStyle(SteamStyle.cyan)
+                Text("新游情报").font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
+                Text("不止 Steam，发现更多新游戏").font(.system(size: 11)).foregroundStyle(SteamStyle.secondary)
             }
             Spacer()
-            Button { Task { await store.loadGames() } } label: {
-                Image(systemName: "arrow.clockwise").font(.system(size: 15, weight: .bold)).foregroundStyle(SteamStyle.cyan)
-                    .frame(width: 42, height: 42).background(SteamStyle.cardLight, in: Circle())
+            Button { Task { await store.load() } } label: {
+                Image(systemName: "arrow.clockwise").font(.system(size: 14, weight: .bold)).foregroundStyle(SteamStyle.cyan)
+                    .frame(width: 40, height: 40).background(SteamStyle.cardLight, in: Circle())
             }.buttonStyle(.plain)
         }
     }
 }
 
-private struct SteamUpcomingGameCard: View {
-    let game: SteamUpcomingGame
+private struct GameNewsCard: View {
+    let item: GameNewsItem
+
     private var dateLabel: String {
-        guard let date = game.releaseDate else { return game.releaseText }
-        let formatter = DateFormatter(); formatter.locale = Locale(identifier: "zh_CN"); formatter.dateFormat = "M月d日"
+        guard let date = item.publishedAt else { return "时间未标注" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月d日 HH:mm"
         return formatter.string(from: date)
     }
+
     var body: some View {
-        VStack(spacing: 11) {
-            HStack(spacing: 12) {
-                AsyncImage(url: URL(string: game.imageURL)) { phase in
-                    if let image = phase.image { image.resizable().aspectRatio(contentMode: .fill) }
-                    else { RoundedRectangle(cornerRadius: 10).fill(SteamStyle.cardLight).overlay(Image(systemName: "gamecontroller.fill").foregroundStyle(SteamStyle.secondary)) }
+        Button { UIApplication.shared.open(item.link) } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 11) {
+                    if !item.imageURL.isEmpty, let url = URL(string: item.imageURL) {
+                        AsyncImage(url: url) { phase in
+                            if let image = phase.image { image.resizable().aspectRatio(contentMode: .fill) }
+                            else { imageFallback }
+                        }.frame(width: 112, height: 76).clipShape(RoundedRectangle(cornerRadius: 10))
+                    } else {
+                        imageFallback.frame(width: 112, height: 76).clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(item.title).font(.system(size: 13, weight: .bold)).foregroundStyle(.white).lineLimit(3).multilineTextAlignment(.leading)
+                        Text(item.summary.isEmpty ? "打开原文查看完整游戏资讯。" : item.summary)
+                            .font(.system(size: 10)).foregroundStyle(SteamStyle.secondary).lineLimit(3).multilineTextAlignment(.leading)
+                    }
+                    Spacer(minLength: 0)
                 }
-                .frame(width: 116, height: 70).clipShape(RoundedRectangle(cornerRadius: 10))
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(game.name).font(.system(size: 14, weight: .bold)).foregroundStyle(.white).lineLimit(2)
-                    Label(dateLabel, systemImage: "calendar").font(.system(size: 11, weight: .semibold)).foregroundStyle(SteamStyle.cyan)
-                    Text("预计发行 · Steam 商店").font(.system(size: 10)).foregroundStyle(SteamStyle.secondary)
+                HStack(spacing: 8) {
+                    Text(item.source).font(.system(size: 10, weight: .semibold)).foregroundStyle(SteamStyle.cyan)
+                    Text("·").foregroundStyle(SteamStyle.secondary)
+                    Text(dateLabel).font(.system(size: 10)).foregroundStyle(SteamStyle.secondary)
+                    Spacer()
+                    Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .bold)).foregroundStyle(SteamStyle.secondary)
                 }
-                Spacer(minLength: 0)
             }
-            Button { UIApplication.shared.open(game.storeURL) } label: {
-                HStack { Image(systemName: "arrow.up.right.square"); Text("查看 Steam 页面"); Spacer(); Text("Steam").foregroundStyle(.white.opacity(0.75)) }
-                    .font(.system(size: 12, weight: .bold)).foregroundStyle(.white).padding(.horizontal, 14).frame(height: 42)
-                    .background(SteamStyle.blue, in: RoundedRectangle(cornerRadius: 11))
-            }.buttonStyle(.plain)
-        }.padding(13).background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 17)).overlay(RoundedRectangle(cornerRadius: 17).stroke(SteamStyle.border, lineWidth: 1))
+            .padding(13).background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 15))
+            .overlay(RoundedRectangle(cornerRadius: 15).stroke(SteamStyle.border, lineWidth: 1))
+        }.buttonStyle(.plain)
+    }
+
+    private var imageFallback: some View {
+        ZStack {
+            SteamStyle.cardLight
+            Image(systemName: "gamecontroller.fill").font(.system(size: 25)).foregroundStyle(SteamStyle.secondary)
+        }
     }
 }
 
