@@ -237,7 +237,7 @@ enum GameNewsAPI {
         for (pattern, replacement) in replacements {
             text = text.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
         }
-        return text.replacingOccurrences(of: "\\\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func parseDate(_ value: String) -> Date? {
