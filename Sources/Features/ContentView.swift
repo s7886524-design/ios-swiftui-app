@@ -2983,6 +2983,215 @@ private struct AboutHomeView: View {
     }
 }
 
+
+private struct RecentBrowsingHomeView: View {
+    @State private var records = RecentGameHistory.load()
+    var body: some View {
+        ZStack {
+            SteamStyle.background.ignoresSafeArea()
+            if records.isEmpty {
+                EmptyAccountPage(icon:"clock", title:"还没有浏览记录", message:"打开 Steam 或 Epic 游戏详情后，会自动记录在这里。")
+            } else {
+                ScrollView {
+                    LazyVStack(spacing:10) {
+                        ForEach(records) { item in
+                            Button {
+                                if let url = URL(string:item.storeURL) { UIApplication.shared.open(url) }
+                            } label: {
+                                HStack(spacing:12) {
+                                    AsyncImage(url:URL(string:item.imageURL)) { phase in
+                                        if let image=phase.image { image.resizable().scaledToFill() }
+                                        else { RoundedRectangle(cornerRadius:9).fill(SteamStyle.cardLight).overlay(Image(systemName:"gamecontroller").foregroundStyle(SteamStyle.secondary)) }
+                                    }.frame(width:104,height:66).clipShape(RoundedRectangle(cornerRadius:9))
+                                    VStack(alignment:.leading,spacing:5) {
+                                        Text(item.name).font(.system(size:14,weight:.semibold)).foregroundStyle(.white).lineLimit(2)
+                                        Text(item.store.uppercased()).font(.system(size:10,weight:.medium)).foregroundStyle(SteamStyle.cyan)
+                                        Text(item.visitedAt.formatted(date:.abbreviated,time:.shortened)).font(.system(size:10)).foregroundStyle(SteamStyle.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName:"chevron.right").foregroundStyle(SteamStyle.secondary)
+                                }.padding(12).frame(maxWidth:.infinity,alignment:.leading).contentShape(Rectangle()).premiumSurface(radius:15)
+                            }.buttonStyle(.plain)
+                        }
+                    }.padding(18).frame(maxWidth:620).frame(maxWidth:.infinity)
+                }
+            }
+        }
+        .navigationTitle("最近浏览").navigationBarTitleDisplayMode(.inline).toolbarColorScheme(.dark,for:.navigationBar)
+        .toolbar { if !records.isEmpty { ToolbarItem(placement:.topBarTrailing) { Button("清空") { RecentGameHistory.clear(); records=[] }.foregroundStyle(SteamStyle.cyan) } } }
+        .onAppear { records=RecentGameHistory.load() }
+    }
+}
+
+private struct ReleaseCalendarHomeView: View {
+    @StateObject private var store=SteamUpcomingStore()
+    @State private var news:[GameNewsItem]=[]
+    @State private var loadingNews=false
+    var body: some View {
+        ZStack {
+            SteamStyle.background.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment:.leading,spacing:14) {
+                    HStack {
+                        VStack(alignment:.leading,spacing:4) {
+                            Text("发行日历").font(.system(size:23,weight:.bold)).foregroundStyle(.white)
+                            Text("Steam 发售计划与全球新游动态").font(.system(size:11)).foregroundStyle(SteamStyle.secondary)
+                        }
+                        Spacer()
+                        Button { Task { await reload() } } label: { Image(systemName:"arrow.clockwise").foregroundStyle(SteamStyle.cyan).frame(width:40,height:40).background(SteamStyle.card,in:Circle()) }.buttonStyle(.plain)
+                    }
+                    Text("Steam 即将发售").font(.system(size:17,weight:.bold)).foregroundStyle(.white)
+                    if store.isLoading && store.games.isEmpty { ProgressView().tint(SteamStyle.cyan).frame(maxWidth:.infinity).padding(24) }
+                    else if store.games.isEmpty { Text(store.errorMessage ?? "暂时没有发行计划").font(.system(size:12)).foregroundStyle(SteamStyle.secondary).padding(15).frame(maxWidth:.infinity,alignment:.leading).background(SteamStyle.card,in:RoundedRectangle(cornerRadius:14)) }
+                    else {
+                        ForEach(store.games) { game in
+                            Button { UIApplication.shared.open(game.storeURL) } label: {
+                                HStack(spacing:11) {
+                                    AsyncImage(url:URL(string:game.imageURL)) { phase in
+                                        if let image=phase.image { image.resizable().scaledToFill() } else { RoundedRectangle(cornerRadius:9).fill(SteamStyle.cardLight) }
+                                    }.frame(width:104,height:62).clipShape(RoundedRectangle(cornerRadius:9))
+                                    VStack(alignment:.leading,spacing:4) {
+                                        Text(game.name).font(.system(size:13,weight:.semibold)).foregroundStyle(.white).lineLimit(2)
+                                        Text(game.releaseText).font(.system(size:10)).foregroundStyle(SteamStyle.cyan)
+                                    }
+                                    Spacer()
+                                    Image(systemName:"chevron.right").foregroundStyle(SteamStyle.secondary)
+                                }.padding(11).contentShape(Rectangle()).premiumSurface(radius:14)
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                    Text("全球游戏动态").font(.system(size:17,weight:.bold)).foregroundStyle(.white).padding(.top,8)
+                    if loadingNews && news.isEmpty { ProgressView().tint(SteamStyle.cyan).frame(maxWidth:.infinity).padding(20) }
+                    ForEach(news.prefix(20)) { GameNewsCard(item:$0) }
+                    if news.isEmpty && !loadingNews { Text("暂无媒体动态，点击右上角刷新。").font(.system(size:11)).foregroundStyle(SteamStyle.secondary) }
+                }.padding(18).frame(maxWidth:620).frame(maxWidth:.infinity)
+            }.refreshable { await reload() }
+        }
+        .navigationTitle("发行日历").navigationBarTitleDisplayMode(.inline).toolbarColorScheme(.dark,for:.navigationBar)
+        .task { await reload() }
+    }
+    @MainActor private func reload() async {
+        loadingNews=true
+        async let upcoming:Void=store.loadGames()
+        do { news=try await GameNewsAPI.fetchNews() } catch { }
+        _=await upcoming
+        loadingNews=false
+    }
+}
+
+private struct AppearanceSettingsHomeView: View {
+    @AppStorage("app.appearance") private var appearance="dark"
+    var body: some View {
+        ZStack {
+            SteamStyle.background.ignoresSafeArea()
+            VStack(alignment:.leading,spacing:15) {
+                Text("选择应用主题").font(.system(size:22,weight:.bold)).foregroundStyle(.white)
+                Text("设置会自动保存在本机，并立即应用。").font(.system(size:12)).foregroundStyle(SteamStyle.secondary)
+                VStack(spacing:0) {
+                    option("跟随系统","根据 iPhone 系统外观自动切换","system")
+                    Divider().overlay(SteamStyle.border)
+                    option("浅色模式","使用明亮背景","light")
+                    Divider().overlay(SteamStyle.border)
+                    option("深色模式","使用舒适的深色界面","dark")
+                }.padding(.horizontal,14).background(SteamStyle.card,in:RoundedRectangle(cornerRadius:16))
+                Spacer()
+            }.padding(20).frame(maxWidth:620).frame(maxWidth:.infinity,alignment:.top)
+        }.navigationTitle("外观与设置").navigationBarTitleDisplayMode(.inline).toolbarColorScheme(.dark,for:.navigationBar)
+    }
+    private func option(_ title:String,_ detail:String,_ value:String)->some View {
+        Button { appearance=value } label: {
+            HStack {
+                VStack(alignment:.leading,spacing:4) {
+                    Text(title).font(.system(size:14,weight:.semibold)).foregroundStyle(.white)
+                    Text(detail).font(.system(size:10)).foregroundStyle(SteamStyle.secondary)
+                }
+                Spacer()
+                Image(systemName:appearance==value ? "checkmark.circle.fill":"circle").foregroundStyle(appearance==value ? SteamStyle.cyan:SteamStyle.secondary)
+            }.frame(maxWidth:.infinity,minHeight:70).contentShape(Rectangle())
+        }.buttonStyle(.plain)
+    }
+}
+
+private struct AccountSecurityHomeView: View {
+    @ObservedObject var account:AppAccountStore
+    var body: some View {
+        ZStack {
+            SteamStyle.background.ignoresSafeArea()
+            VStack(alignment:.leading,spacing:16) {
+                Text("账户安全").font(.system(size:23,weight:.bold)).foregroundStyle(.white)
+                VStack(alignment:.leading,spacing:12) {
+                    Label("当前账户",systemImage:"person.crop.circle").foregroundStyle(SteamStyle.cyan)
+                    Text(account.isLoggedIn ? account.email:"当前为访客模式").font(.system(size:14,weight:.semibold)).foregroundStyle(.white)
+                    Divider().overlay(SteamStyle.border)
+                    Label("安全说明",systemImage:"lock.shield").foregroundStyle(SteamStyle.cyan)
+                    Text("账户通过 Supabase 邮箱认证管理。快领不会要求或保存你的 Steam 密码。收藏记录优先保存在本机；云端同步以当前版本实际开放情况为准。")
+                        .font(.system(size:12)).foregroundStyle(SteamStyle.secondary).lineSpacing(5)
+                }.padding(16).frame(maxWidth:.infinity,alignment:.leading).background(SteamStyle.card,in:RoundedRectangle(cornerRadius:16))
+                Spacer()
+            }.padding(20).frame(maxWidth:620).frame(maxWidth:.infinity,alignment:.top)
+        }.navigationTitle("账户安全").navigationBarTitleDisplayMode(.inline).toolbarColorScheme(.dark,for:.navigationBar)
+    }
+}
+
+private struct FeedbackHomeView: View {
+    @State private var message=""
+    @State private var copied=false
+    var body: some View {
+        ZStack {
+            SteamStyle.background.ignoresSafeArea()
+            VStack(alignment:.leading,spacing:14) {
+                Text("意见反馈").font(.system(size:23,weight:.bold)).foregroundStyle(.white)
+                Text("告诉我们遇到的问题或希望增加的功能。").font(.system(size:12)).foregroundStyle(SteamStyle.secondary)
+                TextEditor(text:$message).scrollContentBackground(.hidden).foregroundStyle(.white).tint(SteamStyle.cyan)
+                    .padding(10).frame(minHeight:190).background(SteamStyle.card,in:RoundedRectangle(cornerRadius:14))
+                Button { UIPasteboard.general.string=message; copied=true } label: {
+                    Label(copied ? "已复制反馈内容":"复制反馈内容",systemImage:copied ? "checkmark":"doc.on.doc")
+                        .font(.system(size:14,weight:.semibold)).foregroundStyle(.white)
+                        .frame(maxWidth:.infinity).frame(height:48).background(SteamStyle.cardLight,in:RoundedRectangle(cornerRadius:12))
+                }.buttonStyle(.plain).disabled(message.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
+                Text("复制后可通过你常用的方式发送反馈。").font(.system(size:10)).foregroundStyle(SteamStyle.secondary)
+                Spacer()
+            }.padding(20).frame(maxWidth:620).frame(maxWidth:.infinity,alignment:.top)
+        }.navigationTitle("意见反馈").navigationBarTitleDisplayMode(.inline).toolbarColorScheme(.dark,for:.navigationBar)
+    }
+}
+
+private struct AboutHomeView: View {
+    var body: some View {
+        ZStack {
+            SteamStyle.background.ignoresSafeArea()
+            VStack(spacing:16) {
+                Image(systemName:"gamecontroller.fill").font(.system(size:48)).foregroundStyle(SteamStyle.cyan)
+                    .frame(width:92,height:92).background(SteamStyle.card,in:RoundedRectangle(cornerRadius:24))
+                Text("快领").font(.system(size:25,weight:.bold)).foregroundStyle(.white)
+                Text("发现限时免费游戏，掌握全球新游动态。").font(.system(size:12)).foregroundStyle(SteamStyle.secondary)
+                VStack(alignment:.leading,spacing:10) {
+                    LabeledContent("应用版本",value:Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "未知")
+                    Divider().overlay(SteamStyle.border)
+                    LabeledContent("构建版本",value:Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "未知")
+                    Divider().overlay(SteamStyle.border)
+                    Text("数据来源：Steam、Epic Games Store 及公开游戏资讯媒体。游戏商标、图片和相关内容归各自权利人所有。")
+                        .font(.system(size:10)).foregroundStyle(SteamStyle.secondary).lineSpacing(4)
+                }.padding(16).frame(maxWidth:.infinity,alignment:.leading).background(SteamStyle.card,in:RoundedRectangle(cornerRadius:16))
+                Spacer()
+            }.padding(22).frame(maxWidth:620).frame(maxWidth:.infinity)
+        }.navigationTitle("关于我们").navigationBarTitleDisplayMode(.inline).toolbarColorScheme(.dark,for:.navigationBar)
+    }
+}
+
+private struct EmptyAccountPage: View {
+    let icon:String
+    let title:String
+    let message:String
+    var body: some View {
+        VStack(spacing:10) {
+            Image(systemName:icon).font(.system(size:34,weight:.light)).foregroundStyle(SteamStyle.secondary)
+            Text(title).font(.system(size:17,weight:.semibold)).foregroundStyle(.white)
+            Text(message).font(.system(size:12)).foregroundStyle(SteamStyle.secondary).multilineTextAlignment(.center).padding(.horizontal,28)
+        }.frame(maxWidth:.infinity,maxHeight:.infinity)
+    }
+}
+
 private struct AccountHomeView: View {
     @ObservedObject var account: AppAccountStore
     @AppStorage("app.profile.nickname") private var nickname = ""
@@ -3131,35 +3340,28 @@ private struct AccountHomeView: View {
     }
 
     private var quickActions: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("我的游戏").font(.system(size: 16, weight: .bold)).foregroundStyle(.white).padding(.bottom, 4)
-            NavigationLink { FavoritesHomeView(account: account) } label: {
-                actionRow("我的收藏", subtitle: "Steam + Epic · \(account.favoriteRecords.count) 款", icon: "heart.fill")
-            }.buttonStyle(.plain)
-            NavigationLink { RecentBrowsingHomeView() } label: {
-                actionRow("最近浏览", subtitle: "回到刚刚看过的游戏", icon: "clock.fill")
-            }.buttonStyle(.plain)
-            NavigationLink { ReleaseCalendarHomeView() } label: {
-                actionRow("发行日历", subtitle: "Steam 发售计划与全球新游动态", icon: "calendar")
-            }.buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 5) {
+            Text("我的游戏").font(.system(size: 16, weight: .bold)).foregroundStyle(.white).padding(.bottom, 5)
+            NavigationLink { FavoritesHomeView(account: account) } label: { actionRow("我的收藏", subtitle: "Steam + Epic · \(account.favoriteRecords.count) 款", icon: "heart.fill") }
+                .buttonStyle(.plain).frame(maxWidth: .infinity).contentShape(Rectangle())
+            NavigationLink { RecentBrowsingHomeView() } label: { actionRow("最近浏览", subtitle: "回到刚刚看过的游戏", icon: "clock.fill") }
+                .buttonStyle(.plain).frame(maxWidth: .infinity).contentShape(Rectangle())
+            NavigationLink { ReleaseCalendarHomeView() } label: { actionRow("发行日历", subtitle: "Steam 发售计划与全球新游动态", icon: "calendar") }
+                .buttonStyle(.plain).frame(maxWidth: .infinity).contentShape(Rectangle())
         }.padding(16).background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 18))
     }
 
     private var settingsCard: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("偏好与设置").font(.system(size: 16, weight: .bold)).foregroundStyle(.white).padding(.bottom, 4)
-            NavigationLink { AppearanceSettingsHomeView() } label: {
-                actionRow("外观与设置", subtitle: appearanceLabel, icon: "slider.horizontal.3")
-            }.buttonStyle(.plain)
-            NavigationLink { AccountSecurityHomeView(account: account) } label: {
-                actionRow("账户安全", subtitle: "邮箱账户与本机凭据说明", icon: "lock.shield")
-            }.buttonStyle(.plain)
-            NavigationLink { FeedbackHomeView() } label: {
-                actionRow("意见反馈", subtitle: "提交建议或分享问题描述", icon: "bubble.left")
-            }.buttonStyle(.plain)
-            NavigationLink { AboutHomeView() } label: {
-                actionRow("关于我们", subtitle: "版本信息与服务说明", icon: "info.circle")
-            }.buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 5) {
+            Text("偏好与设置").font(.system(size: 16, weight: .bold)).foregroundStyle(.white).padding(.bottom, 5)
+            NavigationLink { AppearanceSettingsHomeView() } label: { actionRow("外观与设置", subtitle: appearanceLabel, icon: "slider.horizontal.3") }
+                .buttonStyle(.plain).frame(maxWidth: .infinity).contentShape(Rectangle())
+            NavigationLink { AccountSecurityHomeView(account: account) } label: { actionRow("账户安全", subtitle: "邮箱账户与本机凭据说明", icon: "lock.shield") }
+                .buttonStyle(.plain).frame(maxWidth: .infinity).contentShape(Rectangle())
+            NavigationLink { FeedbackHomeView() } label: { actionRow("意见反馈", subtitle: "提交建议或分享问题描述", icon: "bubble.left") }
+                .buttonStyle(.plain).frame(maxWidth: .infinity).contentShape(Rectangle())
+            NavigationLink { AboutHomeView() } label: { actionRow("关于我们", subtitle: "版本信息与服务说明", icon: "info.circle") }
+                .buttonStyle(.plain).frame(maxWidth: .infinity).contentShape(Rectangle())
         }.padding(16).background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 18))
     }
 
@@ -3248,10 +3450,11 @@ private struct AccountHomeView: View {
             Spacer()
             Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundStyle(SteamStyle.secondary)
         }
-        .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
         .contentShape(Rectangle())
-        .padding(.horizontal, 2)
-        .padding(.vertical, 5)
     }
 
     private func modeButton(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
