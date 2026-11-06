@@ -9,11 +9,7 @@ name: iOS Build (Unsigned IPA)
 # needs NO edits when you rename the app.
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - "**.md"
+  # 仅手动触发；源码提交不会自动构建 IPA。
   workflow_dispatch:
 
 concurrency:
