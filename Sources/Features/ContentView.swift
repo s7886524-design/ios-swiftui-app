@@ -213,7 +213,9 @@ enum GameNewsAPI {
     private static let feeds = [
         GameNewsFeed(name: "Gematsu", url: URL(string: "https://www.gematsu.com/feed")!),
         GameNewsFeed(name: "3DM游戏", url: URL(string: "https://www.3dmgame.com/rss.xml")!),
-        GameNewsFeed(name: "游民星空", url: URL(string: "https://www.gamersky.com/rss/")!)
+        GameNewsFeed(name: "游民星空", url: URL(string: "https://www.gamersky.com/rss/")!),
+        GameNewsFeed(name: "PC Gamer", url: URL(string: "https://www.pcgamer.com/rss/")!),
+        GameNewsFeed(name: "GameSpot", url: URL(string: "https://www.gamespot.com/feeds/news/")!)
     ]
 
     static func fetchNews() async throws -> [GameNewsItem] {
@@ -233,9 +235,6 @@ enum GameNewsAPI {
                     let rawLink = clean(item["link"] ?? "")
                     guard !title.isEmpty, let link = URL(string: rawLink), ["http", "https"].contains(link.scheme?.lowercased() ?? "") else { continue }
                     let summary = clean(item["summary"] ?? "")
-                    let searchable = (title + " " + summary).lowercased()
-                    let keywords = ["game", "games", "游戏", "发售", "发行", "预告", "公布", "公开", "steam", "pc", "playstation", "xbox", "switch", "任天堂", "育碧", "索尼", "微软", "开发"]
-                    guard keywords.contains(where: { searchable.contains($0) }) else { continue }
                     let dateText = item["pubdate"] ?? item["published"] ?? item["updated"] ?? ""
                     collected.append(GameNewsItem(id: link.absoluteString, title: title, summary: String(summary.prefix(220)), link: link, source: feed.name, publishedAt: parseDate(dateText), imageURL: item["image"] ?? ""))
                 }
@@ -2832,6 +2831,11 @@ private struct ReleaseCalendarHomeView: View {
                         }
                         Link(destination: URL(string: "https://store.steampowered.com/search/?filter=comingsoon")!) {
                             Label("Steam 即将推出", systemImage: "gamecontroller")
+                                .font(.system(size: 11, weight: .semibold)).frame(maxWidth: .infinity).padding(12)
+                                .background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        Link(destination: URL(string: "https://store.epicgames.com/en-US/browse")!) {
+                            Label("Epic 商店新品", systemImage: "e.square")
                                 .font(.system(size: 11, weight: .semibold)).frame(maxWidth: .infinity).padding(12)
                                 .background(SteamStyle.card, in: RoundedRectangle(cornerRadius: 12))
                         }
